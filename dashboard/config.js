@@ -12,7 +12,7 @@ const CONFIG = {
     // 1. Create a project
     // 2. Enable Google Sheets API
     // 3. Create an API key in Credentials
-    API_KEY: 'YOUR_API_KEY_HERE',
+    API_KEY: 'AIzaSyCqWRqbqHW_vfEBF5C_474AxFHRRgJ6jo4',
     
     // Sheet name and range to fetch
     // Examples: 'Sheet1', 'Sheet1!A1:Z100', 'Data!A:F'
