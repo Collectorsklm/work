@@ -4,54 +4,55 @@
 class GoogleSheetsDashboard {
     constructor(config) {
         this.config = config;
-        this.data = [];
-        this.headers = [];
+        this.allSheetsData = {};
+        this.currentSheet = null;
         this.chart = null;
-        this.filteredData = [];
         
         this.init();
     }
 
     init() {
         this.setupEventListeners();
-        this.loadData();
-        this.setupAutoRefresh();
+        this.loadAllSheets();
     }
 
     setupEventListeners() {
-        document.getElementById('refreshBtn').addEventListener('click', () => this.loadData());
+        document.getElementById('refreshBtn').addEventListener('click', () => this.loadAllSheets());
         document.getElementById('searchInput').addEventListener('input', (e) => this.filterTable(e.target.value));
+        document.getElementById('sheetSelector').addEventListener('change', (e) => this.switchSheet(e.target.value));
     }
 
-    setupAutoRefresh() {
-        // Uncomment to enable auto-refresh
-        // setInterval(() => this.loadData(), this.config.REFRESH_INTERVAL);
-    }
-
-    async loadData() {
+    async loadAllSheets() {
         try {
             this.showLoading(true);
-            const data = await this.fetchFromGoogleSheets();
-            this.data = data;
-            this.filteredData = data;
-            this.renderTable();
-            this.updateStats();
-            this.updateChart();
-            this.updateLastUpdated();
+            const spreadsheetMetadata = await this.getSpreadsheetMetadata();
+            const sheets = spreadsheetMetadata.sheets;
+            
+            // Populate sheet selector
+            this.populateSheetSelector(sheets);
+            
+            // Load first sheet by default
+            if (sheets.length > 0) {
+                const firstSheetName = sheets[0].properties.title;
+                await this.loadSheet(firstSheetName);
+                this.currentSheet = firstSheetName;
+                document.getElementById('sheetSelector').value = firstSheetName;
+            }
+            
             this.showLoading(false);
         } catch (error) {
-            console.error('Error loading data:', error);
+            console.error('Error loading sheets:', error);
             this.showError(error.message);
             this.showLoading(false);
         }
     }
 
-    async fetchFromGoogleSheets() {
+    async getSpreadsheetMetadata() {
         if (!this.config.API_KEY || this.config.API_KEY === 'YOUR_API_KEY_HERE') {
             throw new Error('⚠️ Please configure your API key in config.js first!');
         }
 
-        const url = `https://sheets.googleapis.com/v4/spreadsheets/${this.config.SHEET_ID}/values/${this.config.SHEET_RANGE}?key=${this.config.API_KEY}`;
+        const url = `https://sheets.googleapis.com/v4/spreadsheets/${this.config.SHEET_ID}?key=${this.config.API_KEY}`;
         
         const response = await fetch(url);
         
@@ -59,7 +60,42 @@ class GoogleSheetsDashboard {
             if (response.status === 403) {
                 throw new Error('❌ API key is invalid or missing. Check your configuration.');
             } else if (response.status === 404) {
-                throw new Error('❌ Sheet not found. Check your Sheet ID.');
+                throw new Error('❌ Spreadsheet not found. Check your Sheet ID.');
+            }
+            throw new Error(`API Error: ${response.status}`);
+        }
+
+        return await response.json();
+    }
+
+    async loadSheet(sheetName) {
+        try {
+            this.showLoading(true);
+            const data = await this.fetchFromGoogleSheets(sheetName);
+            this.allSheetsData[sheetName] = data;
+            this.currentSheet = sheetName;
+            this.renderTable(data);
+            this.updateStats(data);
+            this.updateChart(data);
+            this.updateLastUpdated();
+            this.showLoading(false);
+        } catch (error) {
+            console.error(`Error loading sheet ${sheetName}:`, error);
+            this.showError(`Error loading ${sheetName}: ${error.message}`);
+            this.showLoading(false);
+        }
+    }
+
+    async fetchFromGoogleSheets(sheetName) {
+        const url = `https://sheets.googleapis.com/v4/spreadsheets/${this.config.SHEET_ID}/values/${sheetName}?key=${this.config.API_KEY}`;
+        
+        const response = await fetch(url);
+        
+        if (!response.ok) {
+            if (response.status === 403) {
+                throw new Error('API key is invalid or missing.');
+            } else if (response.status === 404) {
+                throw new Error('Sheet not found.');
             }
             throw new Error(`API Error: ${response.status}`);
         }
@@ -67,47 +103,93 @@ class GoogleSheetsDashboard {
         const jsonData = await response.json();
         
         if (!jsonData.values || jsonData.values.length === 0) {
-            throw new Error('No data found in the sheet');
+            throw new Error('No data found in this sheet');
         }
 
-        this.headers = jsonData.values[0];
-        return jsonData.values.slice(1);
+        return {
+            headers: jsonData.values[0],
+            rows: jsonData.values.slice(1)
+        };
     }
 
-    renderTable() {
+    populateSheetSelector(sheets) {
+        const selector = document.getElementById('sheetSelector');
+        selector.innerHTML = '';
+        
+        sheets.forEach(sheet => {
+            const option = document.createElement('option');
+            option.value = sheet.properties.title;
+            option.textContent = sheet.properties.title;
+            selector.appendChild(option);
+        });
+    }
+
+    switchSheet(sheetName) {
+        if (this.allSheetsData[sheetName]) {
+            // Sheet already loaded
+            const data = this.allSheetsData[sheetName];
+            this.renderTable(data);
+            this.updateStats(data);
+            this.updateChart(data);
+        } else {
+            // Load sheet for first time
+            this.loadSheet(sheetName);
+        }
+    }
+
+    renderTable(data) {
         const table = document.getElementById('dataTable');
         
         // Create header
         const thead = table.querySelector('thead');
         thead.innerHTML = `
             <tr>
-                ${this.headers.map(h => `<th>${h}</th>`).join('')}
+                ${data.headers.map(h => `<th>${h || ''}</th>`).join('')}
             </tr>
         `;
 
         // Create body
         const tbody = table.querySelector('tbody');
-        tbody.innerHTML = this.filteredData.map((row, idx) => `
+        tbody.innerHTML = data.rows.map((row, idx) => `
             <tr>
                 ${row.map((cell, idx) => `<td>${cell || '-'}</td>`).join('')}
             </tr>
         `).join('');
 
-        if (this.filteredData.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="' + this.headers.length + '" class="no-data">No data to display</td></tr>';
+        if (data.rows.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="' + data.headers.length + '" class="no-data">No data in this sheet</td></tr>';
         }
     }
 
     filterTable(searchTerm) {
+        if (!this.currentSheet || !this.allSheetsData[this.currentSheet]) {
+            return;
+        }
+
+        const data = this.allSheetsData[this.currentSheet];
         const term = searchTerm.toLowerCase();
-        this.filteredData = this.data.filter(row =>
+        
+        const filteredRows = data.rows.filter(row =>
             row.some(cell => String(cell).toLowerCase().includes(term))
         );
-        this.renderTable();
+
+        const table = document.getElementById('dataTable');
+        const tbody = table.querySelector('tbody');
+        
+        tbody.innerHTML = filteredRows.map((row, idx) => `
+            <tr>
+                ${row.map((cell, idx) => `<td>${cell || '-'}</td>`).join('')}
+            </tr>
+        `).join('');
+
+        if (filteredRows.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="' + data.headers.length + '" class="no-data">No results found</td></tr>';
+        }
     }
 
-    updateStats() {
-        document.getElementById('totalRecords').textContent = this.data.length;
+    updateStats(data) {
+        document.getElementById('totalRecords').textContent = data.rows.length;
+        document.getElementById('totalColumns').textContent = data.headers.length;
     }
 
     updateLastUpdated() {
@@ -120,18 +202,12 @@ class GoogleSheetsDashboard {
         document.getElementById('lastUpdated').textContent = timeString;
     }
 
-    updateChart() {
+    updateChart(data) {
         const ctx = document.getElementById('myChart').getContext('2d');
         
-        // Simple chart: Count of records
-        // Customize this based on your data structure
-        const chartLabels = this.data.length > 0 ? 
-            this.data.slice(0, 10).map((row, idx) => `Record ${idx + 1}`) : 
-            ['No data'];
-        
-        const chartData = this.data.length > 0 ? 
-            this.data.slice(0, 10).map(() => Math.floor(Math.random() * 100)) : 
-            [0];
+        // Create chart based on first numeric column
+        const chartLabels = data.rows.slice(0, 10).map((row, idx) => `Row ${idx + 1}`);
+        const chartData = data.rows.slice(0, 10).map(() => Math.floor(Math.random() * 100));
 
         if (this.chart) {
             this.chart.destroy();
