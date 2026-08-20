@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Work Dashboard</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📊 Dashboard</h1>
+            <p>Real-time data from Google Sheets</p>
+        </header>
+
+        <div class="controls">
+            <button id="refreshBtn" class="btn btn-primary">🔄 Refresh Data</button>
+            <input type="text" id="searchInput" placeholder="Search..." class="search-input">
+        </div>
+
+        <div class="dashboard-grid">
+            <div class="card stats-card">
+                <h3>Total Records</h3>
+                <p id="totalRecords" class="stat-value">0</p>
+            </div>
+            <div class="card stats-card">
+                <h3>Last Updated</h3>
+                <p id="lastUpdated" class="stat-value">--:--</p>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Data Table</h2>
+            <div class="table-wrapper">
+                <table id="dataTable" class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Loading...</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Fetching data from Google Sheets...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Charts & Analytics</h2>
+            <div class="chart-container">
+                <canvas id="myChart" style="max-width: 100%;"></canvas>
+            </div>
+        </div>
+
+        <footer>
+            <p>Dashboard v1.0 | Powered by Google Sheets API</p>
+        </footer>
+    </div>
+
+    <script src="config.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
